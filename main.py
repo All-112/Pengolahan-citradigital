@@ -1,3 +1,5 @@
+import os
+import sys
 from PIL import Image
 from PIL.ExifTags import TAGS
 from pillow_heif import register_heif_opener
@@ -6,10 +8,36 @@ import numpy as np
 register_heif_opener()
 
 # ==========================================
+# PENGATURAN: GANTI NAMA FILE DI SINI
+# ==========================================
+# Foto contoh yang tersedia:
+#   "Andro.jpeg" -> foto dari Android
+#   "cam.jpeg"   -> foto dari kamera DSLR/mirrorless (Sony)
+#   "coba.heif"  -> foto dari iPhone
+# Foto lain juga bisa dipakai: taruh di folder ini, lalu tulis namanya.
+
+NAMA_FILE = "cam.jpeg"
+
+# Cara lain: pilih foto lewat terminal tanpa mengubah kode
+#   python main.py Andro.jpeg
+if len(sys.argv) > 1:
+    NAMA_FILE = sys.argv[1]
+
+# Cek apakah file ada
+if not os.path.exists(NAMA_FILE):
+    print(f"File '{NAMA_FILE}' tidak ditemukan.")
+    print("Foto yang tersedia di folder ini:")
+    for f in sorted(os.listdir(".")):
+        if f.lower().endswith((".jpg", ".jpeg", ".png", ".heic", ".heif")):
+            print(" -", f)
+    sys.exit()
+
+
+# ==========================================
 # 1. MEMBUKA FOTO
 # ==========================================
 
-foto = Image.open("cam.jpeg")
+foto = Image.open(NAMA_FILE)
 
 
 # ==========================================
@@ -18,17 +46,16 @@ foto = Image.open("cam.jpeg")
 
 print("=== INFORMASI FOTO ===")
 
-print("Nama file      :", foto.filename)
-print("Format         :", foto.format)
-print("Ukuran         :", foto.size)
-print("Mode warna     :", foto.mode)
-
 # Mengambil lebar dan tinggi gambar
 lebar, tinggi = foto.size
 
 # Menghitung jumlah pixel
 jumlah_pixel = lebar * tinggi
 
+print("Nama file      :", os.path.basename(NAMA_FILE))
+print("Format         :", foto.format)
+print("Ukuran         :", foto.size)
+print("Mode warna     :", foto.mode)
 print("Lebar          :", lebar, "pixel")
 print("Tinggi         :", tinggi, "pixel")
 print("Jumlah pixel   :", jumlah_pixel)
@@ -74,9 +101,15 @@ tag_pilihan = [
     "ExifImageHeight"
 ]
 
+ada_tag = False
+
 for nama_tag in tag_pilihan:
     if nama_tag in semua_exif:
         print(nama_tag, ":", semua_exif[nama_tag])
+        ada_tag = True
+
+if not ada_tag:
+    print("Metadata EXIF tidak tersedia.")
 
 
 # ==========================================
@@ -103,6 +136,10 @@ for label, daftar_tag in metadata_dicari:
         if tag in semua_exif:
             nilai = semua_exif[tag]
             break
+
+    # Beberapa perangkat menyimpan ISO sebagai tuple, ambil nilai pertama
+    if isinstance(nilai, (tuple, list)) and len(nilai) > 0:
+        nilai = nilai[0]
 
     if nilai is None:
         print(label, ": Tidak tersedia")
@@ -143,9 +180,9 @@ print("\n=== DATA RGB PIXEL (0,0) ===")
 
 pixel = foto.getpixel((0, 0))
 
-if foto.mode == "RGB":
+if foto.mode in ("RGB", "RGBA"):
 
-    r, g, b = pixel
+    r, g, b = pixel[:3]
 
     print("Nilai R (Red)   :", r)
     print("Nilai G (Green) :", g)
@@ -184,7 +221,7 @@ for y in range(3):
 print("\n=== GAMBAR SEBAGAI ARRAY ANGKA ===")
 
 # Mengubah seluruh gambar menjadi array angka
-array_foto = np.array(foto)
+array_foto = np.array(foto.convert("RGB"))
 
 print("Bentuk array   :", array_foto.shape)   # (tinggi, lebar, 3)
 print("Tipe data      :", array_foto.dtype)   # uint8 = angka 0-255
@@ -202,16 +239,28 @@ print(array_foto[0:2, 0:3])
 
 print("\n=== BUKTI UBAH ANGKA ===")
 
-# Ambil potongan 200 x 200 pixel dari pojok kiri atas
-potongan = array_foto[0:200, 0:200].copy()
+os.makedirs("hasil", exist_ok=True)
+
+# Potongan 200 x 200 pixel dari tengah foto
+tengah_x = lebar // 2
+tengah_y = tinggi // 2
+
+potongan = array_foto[
+    max(tengah_y - 100, 0):tengah_y + 100,
+    max(tengah_x - 100, 0):tengah_x + 100
+].copy()
+
+nama = os.path.splitext(os.path.basename(NAMA_FILE))[0]
+file_asli = f"hasil/{nama}_potongan_asli.png"
+file_ubah = f"hasil/{nama}_potongan_tanpa_hijau.png"
 
 # Simpan potongan asli
-Image.fromarray(potongan).save("potongan_asli.png")
+Image.fromarray(potongan).save(file_asli)
 
 # Ubah angkanya: hapus channel hijau (G = 0)
 potongan[:, :, 1] = 0
-Image.fromarray(potongan).save("potongan_tanpa_hijau.png")
+Image.fromarray(potongan).save(file_ubah)
 
-print("Potongan asli disimpan        : potongan_asli.png")
-print("Channel hijau diubah jadi 0   : potongan_tanpa_hijau.png")
+print("Potongan asli disimpan        :", file_asli)
+print("Channel hijau diubah jadi 0   :", file_ubah)
 print("Kesimpulan: angka diubah -> tampilan gambar ikut berubah")
